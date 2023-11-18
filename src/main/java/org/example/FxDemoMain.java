@@ -9,6 +9,6 @@ public class FxDemoMain {
     public static void main(String[] args) {
 
         SpringApplication.run(FxDemoMain.class, args);
-        Application.launch(FxDemoApp.class, args);
+        Application.launch(UrlExtractorApp.class, args);
     }
 }
