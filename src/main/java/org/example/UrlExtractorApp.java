@@ -16,9 +16,12 @@ import javafx.stage.Stage;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class UrlExtractorApp extends Application {
@@ -30,6 +33,7 @@ public class UrlExtractorApp extends Application {
     private Button exitButton;
 
     private UrlExtractService urlExtractService;
+    private static String dictionary = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
     @Override
     public void start(Stage primaryStage) {
@@ -88,25 +92,41 @@ public class UrlExtractorApp extends Application {
                 protected Void call() throws Exception {
                     String suffixText = suffixTextField.getText();
                     if (suffixText.isEmpty()) {
-                        log("请输入后缀位数", Color.RED);
+                        log("请输入后缀位数", null, Color.RED);
+                        startButton.setDisable(false);
                         return null;
                     }
 
                     String prefix = pathTextField.getText();
                     try {
-                        int num = Integer.parseInt(suffixText);
-                        log("开始提取......", Color.BLUE);
+                        int length = Integer.parseInt(suffixText);
+                        log("开始提取......", null, Color.BLUE);
+                        int[] indices = new int[length];
 
-                        int totalCombinations = (int) Math.pow(26, num);
-
-                        for (int i = 0; i < totalCombinations && !isCancelled(); i++) {
-                            String code = numberToLetters(i, num);
+                        while (true) {
+                            StringBuilder currentCombination = new StringBuilder();
+                            for (int index : indices) {
+                                currentCombination.append(dictionary.charAt(index));
+                            }
+                            String code = currentCombination.toString();
                             requestUrl(prefix + code);
-                            Thread.sleep(1000);
+                            //Thread.sleep(1000);
+
+                            // Increment indices
+                            int i = length - 1;
+                            while (i >= 0 && indices[i] == dictionary.length() - 1) {
+                                indices[i] = 0;
+                                i--;
+                            }
+                            if (i < 0) {
+                                break; // All combinations generated
+                            }
+                            indices[i]++;
                         }
 
                     } catch (NumberFormatException e) {
-                        log("Invalid suffix. Please enter a numeric value.", Color.RED);
+                        log("请输入数字", null, Color.RED);
+                        startButton.setDisable(false);
                     }
 
                     return null;
@@ -115,28 +135,11 @@ public class UrlExtractorApp extends Application {
         }
     }
 
-    private static String numberToLetters(int num, int length) {
-        StringBuilder result = new StringBuilder();
-
-        while (num >= 0 && length > 0) {
-            result.insert(0, (char) ('A' + num % 26));
-            num = num / 26 - 1;
-            length--;
-        }
-
-        while (length > 0) {
-            result.insert(0, 'A');
-            length--;
-        }
-
-        return result.toString();
-    }
-
     private void sleep(int s){
-        log("等待......" + s + "秒", Color.BLUE);
+        log("等待......" + s + "秒", null, Color.BLUE);
         for(int i = 1; i <= s; i++){
             try {
-                log("等待第" + i + "秒", Color.BLUE);
+                log("等待第" + i + "秒", null, Color.BLUE);
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
@@ -146,7 +149,7 @@ public class UrlExtractorApp extends Application {
     }
 
     private void requestUrl(String url) {
-        log("开始请求：" + url, Color.BLUE);
+        log("开始请求：", url, Color.BLUE);
         while (true){
             try {
                 Request request = new Request.Builder()
@@ -181,53 +184,54 @@ public class UrlExtractorApp extends Application {
                     String responseBody = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
                     response.close();
                     if(responseBody.contains("The address you visited does not exist")) {
-                        log("访问成功！URL不存在 " + url, Color.BLUE);
+                        log("访问成功！URL不存在 ", url, Color.BLUE);
                         return;
                     }else if(responseBody.contains("The app has expired and developers are required to renew it in a timely manner")){
-                        log("访问成功！应用已过期 " + url, Color.BLUE);
+                        log("访问成功！应用已过期 ", url, Color.BLUE);
                         return;
                     }else if(responseBody.contains("The app has been removed")){
-                        log("访问成功！应用程序已被删除 " + url, Color.BLUE);
+                        log("访问成功！应用程序已被删除 ", url, Color.BLUE);
                         return;
                     }else if(responseBody.contains("该应用已关闭下载")){
-                        log("访问成功！应用已关闭下载 " + url, Color.BLUE);
+                        log("访问成功！应用已关闭下载 ", url, Color.BLUE);
                         return;
                     }else if(responseBody.contains("Sign Up")){
-                        log("访问成功！跳转到首页了 " + url, Color.BLUE);
+                        log("访问成功！跳转到首页了 ", url, Color.BLUE);
                         return;
                     }else if(responseBody.contains("There are no downloadable versions of the apps")){
-                        log("访问成功！无可下载版本 " + url, Color.BLUE);
+                        log("访问成功！无可下载版本 ", url, Color.BLUE);
                         return;
                     }else if(responseBody.contains("The app has not been released yet, please be patient")){
-                        log("访问成功！应用尚未发布 " + url, Color.BLUE);
+                        log("访问成功！应用尚未发布 ", url, Color.BLUE);
                         return;
                     }else if(responseBody.contains("<p>1</p>")){
-                        log("无效连接 " + url, Color.BLUE);
+                        log("无效连接 ", url, Color.BLUE);
                         return;
                     }else if(responseBody.contains("该应用已下架")){
-                        log("访问成功！应用已下架 " + url, Color.BLUE);
+                        log("访问成功！应用已下架 ", url, Color.BLUE);
                         return;
                     }else if(responseBody.contains("该应用已过期，请开发人员及时续签")){
-                        log("访问成功！应用已过期 " + url, Color.BLUE);
+                        log("访问成功！应用已过期 ", url, Color.BLUE);
                         return;
                     }else if(responseBody.contains("Start validation")){
-                        log("访问失败！需要人工校验 " + url, Color.RED);
+                        log("访问失败！需要人工校验 ", url, Color.RED);
                         sleep(20);
 
                     }else {
-                        log("访问成功 " + url, Color.GREEN);
+                        log("访问成功 ", url, Color.GREEN);
+                        download(responseBody);
                         return;
                     }
                 } else {
                     response.close();
                     if(code == 404){
-                        log("不存在 " + url, Color.BLUE);
+                        log("不存在 ", url, Color.BLUE);
                         return;
                     } else if(code == 503){
-                        log("服务不可用 " + url, Color.RED);
+                        log("服务不可用 ", url, Color.RED);
                         return;
                     } else{
-                        log("无效 " + url, Color.BLUE);
+                        log("无效 ", url, Color.BLUE);
                         return;
                     }
 
@@ -239,14 +243,37 @@ public class UrlExtractorApp extends Application {
         }
     }
 
+    private void download(String responseBody) {
+        //找到下载链接并下载
+    }
+
     private void clearLog() {
         Platform.runLater(() -> logTextFlow.getChildren().clear());
     }
 
-    private void log(String message, Color color) {
-        Text text = new Text(message + "\n");
+    private void log(String message, String url, Color color) {
+        Text text = null;
+        if(StringUtils.isNotBlank(url)){
+            text = new Text(message);
+        } else {
+            text = new Text(message + "\n");
+        }
         text.setFill(color);
-        Platform.runLater(() -> logTextFlow.getChildren().add(text));
+        Text text1 = text;
+        Platform.runLater(() -> logTextFlow.getChildren().add(text1));
+        if(StringUtils.isNotBlank(url)){
+            Hyperlink hyperlink = new Hyperlink(url + "\n");
+            hyperlink.setTextFill(color);
+            hyperlink.setOnAction(event -> {
+                // 在默认浏览器中打开URL
+                getHostServices().showDocument(url);
+            });
+            Platform.runLater(() -> logTextFlow.getChildren().add(hyperlink));
+            Platform.runLater(() -> logTextFlow.getChildren().add(new Text("\n")));
+        }
+
+
+
     }
 
     public static void main(String[] args) {
