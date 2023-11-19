@@ -244,6 +244,8 @@ public class UrlExtractorApp extends Application {
     }
 
     private void download(String responseBody) {
+
+
         //找到下载链接并下载
     }
 
