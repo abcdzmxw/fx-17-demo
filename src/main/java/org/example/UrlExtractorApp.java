@@ -7,7 +7,6 @@ import javafx.concurrent.Task;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.scene.input.KeyCode;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -26,7 +25,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -44,13 +45,18 @@ public class UrlExtractorApp extends Application {
     private UrlExtractService urlExtractService;
     private static String dictionary = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private static Set<String> fileNames = new HashSet<>();
+    private static OkHttpClient client = new OkHttpClient.Builder()
+            .connectTimeout(30000, TimeUnit.SECONDS) // 设置连接超时时间为 10 秒
+            .readTimeout(50000, TimeUnit.SECONDS) // 设置读取超时时间为 30 秒
+            .writeTimeout(30000, TimeUnit.SECONDS) //
+            .build();
 
     @Override
     public void start(Stage primaryStage) {
         primaryStage.setTitle("rulai-URL提取");
 
         fileSavePathTextField = new TextField();
-        fileSavePathTextField.setText("D:\\Java\\a\\");
+        fileSavePathTextField.setText("D:\\Java\\a\\aa\\");
 
         pathTextField = new TextField();
         pathTextField.setText("https://www.pgyer.com/");
@@ -58,6 +64,7 @@ public class UrlExtractorApp extends Application {
 
         suffixTextField = new TextField();
         suffixTextField.setPromptText("输入位数");
+        suffixTextField.setText("4");
 
         startTextField = new TextField();
 
@@ -98,10 +105,22 @@ public class UrlExtractorApp extends Application {
         primaryStage.setResizable(false);
         primaryStage.show();
 
-        urlExtractService = new UrlExtractService();
         startButton.setOnAction(e -> {
-            startButton.setDisable(true);
-            urlExtractService.restart();
+            String text = startButton.getText();
+            if("开始提取".equalsIgnoreCase(text)){
+                if(urlExtractService != null){
+                    urlExtractService.cancel();
+                }
+                startButton.setText("停止");
+                urlExtractService = new UrlExtractService();
+                urlExtractService.start();
+            } else if("停止".equalsIgnoreCase(text)){
+                startButton.setText("开始提取");
+                urlExtractService.cancel();
+                urlExtractService = new UrlExtractService();
+                urlExtractService.start();
+            }
+
         });
 
         exitButton.setOnAction(e -> clearLog());
@@ -251,11 +270,7 @@ public class UrlExtractorApp extends Application {
                         .header("sec-ch-ua-mobile", "?0")
                         .header("sec-ch-ua-platform", "\"Windows\"")
                         .build();
-                OkHttpClient client = new OkHttpClient.Builder()
-                        .connectTimeout(30000, TimeUnit.SECONDS) // 设置连接超时时间为 10 秒
-                        .readTimeout(50000, TimeUnit.SECONDS) // 设置读取超时时间为 30 秒
-                        .writeTimeout(30000, TimeUnit.SECONDS) //
-                        .build();
+
                 Response response = client.newCall(request).execute();
 
                 int code = response.code();
