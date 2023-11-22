@@ -7,37 +7,50 @@ import javafx.concurrent.Task;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.input.KeyCode;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
 import javafx.stage.Stage;
+import kotlin.Pair;
+import okhttp3.Headers;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.apache.commons.lang3.StringUtils;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class UrlExtractorApp extends Application {
 
+    private TextField fileSavePathTextField;
     private TextField pathTextField;
     private TextField suffixTextField;
+    private TextField startTextField;
     private TextFlow logTextFlow;
     private Button startButton;
     private Button exitButton;
 
     private UrlExtractService urlExtractService;
     private static String dictionary = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    private static Set<String> fileNames = new HashSet<>();
 
     @Override
     public void start(Stage primaryStage) {
         primaryStage.setTitle("rulai-URL提取");
+
+        fileSavePathTextField = new TextField();
+        fileSavePathTextField.setText("D:\\Java\\a\\");
 
         pathTextField = new TextField();
         pathTextField.setText("https://www.pgyer.com/");
@@ -45,6 +58,8 @@ public class UrlExtractorApp extends Application {
 
         suffixTextField = new TextField();
         suffixTextField.setPromptText("输入位数");
+
+        startTextField = new TextField();
 
         startButton = new Button("开始提取");
         exitButton = new Button("清除日志记录");
@@ -54,17 +69,25 @@ public class UrlExtractorApp extends Application {
         ScrollPane logScrollPane = new ScrollPane(logTextFlow);
         logScrollPane.setFitToWidth(true);
 
+        HBox fileSavePathBox = new HBox(10);
+        fileSavePathBox.getChildren().addAll(new Label("app保存路径: "), fileSavePathTextField);
+
         HBox pathBox = new HBox(5);
         pathBox.getChildren().addAll(new Label("路径（不可变）: "), pathTextField);
 
         HBox suffixBox = new HBox(10);
         suffixBox.getChildren().addAll(new Label("后缀（字母位数）: "), suffixTextField);
 
+        HBox startBox = new HBox(10);
+        startBox.getChildren().addAll(new Label("开始字母: "), startTextField);
+
         VBox layout = new VBox(10);
         layout.setAlignment(Pos.CENTER);
         layout.getChildren().addAll(
+                fileSavePathBox,
                 pathBox,
                 suffixBox,
+                startBox,
                 startButton,
                 logScrollPane,
                 exitButton
@@ -90,6 +113,12 @@ public class UrlExtractorApp extends Application {
             return new Task<Void>() {
                 @Override
                 protected Void call() throws Exception {
+                    String fileSavePathText = fileSavePathTextField.getText();
+                    if (fileSavePathText.isEmpty()) {
+                        log("请输入文件保存路径", null, Color.RED);
+                        return null;
+                    }
+
                     String suffixText = suffixTextField.getText();
                     if (suffixText.isEmpty()) {
                         log("请输入后缀位数", null, Color.RED);
@@ -97,22 +126,63 @@ public class UrlExtractorApp extends Application {
                         return null;
                     }
 
+                    String startTextFieldText = startTextField.getText();
+                    if (startTextFieldText.isEmpty()) {
+                        log("请输入开始字母", null, Color.RED);
+                        startButton.setDisable(false);
+                        return null;
+                    }
+
+                    if(!(Integer.parseInt(suffixText) == startTextFieldText.length())){
+                        log("开始字母不是" + suffixText + "位数的", null, Color.RED);
+                        startButton.setDisable(false);
+                        return null;
+                    }
+
+                    suffixTextField.setDisable(true);
+                    File file = new File(fileSavePathText);
+                    if(!file.exists()){
+                        file.mkdirs();
+                    }
+
+                    String[] fileName = file.list();
+
+                    for (String f : fileName){
+                        fileNames.add(f);
+                    }
+
+                    if(!fileSavePathText.endsWith("\\")){
+                        fileSavePathText = fileSavePathText + "\\";
+                    }
+                    fileSavePathTextField.setText(fileSavePathText);
+                    fileSavePathTextField.setEditable(false);
+
                     String prefix = pathTextField.getText();
                     try {
                         int length = Integer.parseInt(suffixText);
                         log("开始提取......", null, Color.BLUE);
                         int[] indices = new int[length];
 
+                        boolean flag = true;
                         while (true) {
                             StringBuilder currentCombination = new StringBuilder();
                             for (int index : indices) {
                                 currentCombination.append(dictionary.charAt(index));
                             }
                             String code = currentCombination.toString();
-                            requestUrl(prefix + code);
+
+                            if(flag){
+                                if(code.equalsIgnoreCase(startTextFieldText)){
+                                    flag = false;
+                                }
+                            }
+                            if(!flag){
+                                if(!isExist(code)){
+                                    requestUrl(prefix, code);
+                                }
+                            }
                             //Thread.sleep(1000);
 
-                            // Increment indices
                             int i = length - 1;
                             while (i >= 0 && indices[i] == dictionary.length() - 1) {
                                 indices[i] = 0;
@@ -135,6 +205,15 @@ public class UrlExtractorApp extends Application {
         }
     }
 
+    private boolean isExist(String code){
+        for(String f : fileNames){
+            if(f.contains(code)){
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void sleep(int s){
         log("等待......" + s + "秒", null, Color.BLUE);
         for(int i = 1; i <= s; i++){
@@ -148,7 +227,8 @@ public class UrlExtractorApp extends Application {
 
     }
 
-    private void requestUrl(String url) {
+    private void requestUrl(String prefix, String letterCode) {
+        String url = prefix + letterCode;
         log("开始请求：", url, Color.BLUE);
         while (true){
             try {
@@ -219,7 +299,7 @@ public class UrlExtractorApp extends Application {
 
                     }else {
                         log("访问成功 ", url, Color.GREEN);
-                        download(responseBody);
+                        download(responseBody, prefix, letterCode);
                         return;
                     }
                 } else {
@@ -243,10 +323,100 @@ public class UrlExtractorApp extends Application {
         }
     }
 
-    private void download(String responseBody) {
+    private void download(String responseBody, String prefix, String letterCode) {
+        String regex = "aKey\\s*=\\s*'([^']+)'";
+        Pattern pattern = Pattern.compile(regex);
+        Matcher matcher = pattern.matcher(responseBody);
 
+        if (matcher.find()) {
+            String aKeyValue = matcher.group(1);
+            System.out.println("aKey的值是：" + aKeyValue);
+
+            // https://www.pgyer.com/app/install/c83a35235057389af1ccab8f877fc0c9
+            OkHttpClient client = new OkHttpClient();
+
+            // 创建请求对象
+            Request request = new Request.Builder()
+                    .url("https://www.pgyer.com/app/install/" + aKeyValue)
+                    .build();
+
+            try {
+                // 执行请求
+                Response response = client.newCall(request).execute();
+
+                // 获取响应码
+                int responseCode = response.code();
+                System.out.println("Response Code: " + responseCode);
+                if(responseCode == 200){
+                    Headers headers = response.headers();
+                    Iterator<Pair<String, String>> iterator =  headers.iterator();
+                    boolean flag = false;
+                    while (iterator.hasNext()){
+                        Pair<String, String> pair = iterator.next();
+                        System.out.println(pair.getFirst() + "=" + pair.getSecond());
+                        if("Content-Disposition".equals(pair.getFirst())){
+                            String filename = extractFileName(pair.getSecond());
+                            if(StringUtils.isNotBlank(filename)){
+                                flag = true;
+                                filename = letterCode + "--" + filename;
+                                log("开始下载文件 ", prefix + letterCode, Color.BLUE);
+                                // 获取输入流
+                                InputStream inputStream = response.body().byteStream();
+
+                                fileNames.add(filename);
+                                // 创建输出流
+                                FileOutputStream outputStream = new FileOutputStream(fileSavePathTextField.getText().trim() + filename);
+
+                                // 读取输入流并写入输出流
+                                byte[] buffer = new byte[4096];
+                                int bytesRead;
+                                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                                    outputStream.write(buffer, 0, bytesRead);
+                                }
+
+                                // 关闭输入流和输出流
+                                inputStream.close();
+                                outputStream.close();
+                                log("下载完成 ", prefix + letterCode, Color.BLUE);
+                            }
+                        }
+                    }
+
+                    if (!flag){
+                        log("没有可下载的文件 ", prefix + letterCode, Color.RED);
+                    }
+                }else {
+                    log("没有可下载的文件 ", prefix + letterCode, Color.RED);
+                }
+                // 关闭响应体
+                response.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+                log("没有可下载的文件 ", prefix + letterCode, Color.RED);
+            }
+
+        } else {
+            System.out.println("未找到aKey的值。");
+            log("没有可下载的文件 ", prefix + letterCode, Color.RED);
+        }
 
         //找到下载链接并下载
+    }
+
+    private static String extractFileName(String input) {
+        // 匹配文件名的正则表达式
+        String regex = "filename=\"([^\"]+)\"";
+        Pattern pattern = Pattern.compile(regex);
+        Matcher matcher = pattern.matcher(input);
+
+        // 查找匹配的部分
+        if (matcher.find()) {
+            // 提取捕获组中的文件名
+            return matcher.group(1);
+        } else {
+            // 如果未找到匹配项，返回空字符串或者抛出异常，具体取决于你的需求
+            return "";
+        }
     }
 
     private void clearLog() {

@@ -63,7 +63,7 @@
     </dependencies>
 
     <build>
-        <finalName>fx-17-demo</finalName>
+        <finalName>puGongYing</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
